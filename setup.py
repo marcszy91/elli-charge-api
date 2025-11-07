@@ -1,6 +1,8 @@
 """Setup configuration for elli-api-client package."""
-from setuptools import setup, find_packages
+
 from pathlib import Path
+
+from setuptools import setup
 
 # Read the long description from README
 this_directory = Path(__file__).parent
@@ -10,14 +12,14 @@ setup(
     name="elli-api-client",
     version="0.1.0",
     author="Marc Szymkowiak",
-    description="Python client for Elli Charging API with OAuth2 PKCE authentication",
+    description=("Python client for Elli Charging API with OAuth2 PKCE authentication"),
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/elli-charge-api",
+    url="https://github.com/marcszy91/elli-charge-api",
     project_urls={
-        "Bug Tracker": "https://github.com/yourusername/elli-charge-api/issues",
-        "Documentation": "https://github.com/yourusername/elli-charge-api#readme",
-        "Source Code": "https://github.com/yourusername/elli-charge-api",
+        "Bug Tracker": ("https://github.com/marcszy91/elli-charge-api/issues"),
+        "Documentation": ("https://github.com/marcszy91/elli-charge-api#readme"),
+        "Source Code": "https://github.com/marcszy91/elli-charge-api",
     },
     package_dir={"": "src"},
     packages=["elli_api_client"],
@@ -46,5 +48,5 @@ setup(
             "flake8>=7.0.0",
         ],
     },
-    keywords="elli volkswagen charging wallbox api ev electric-vehicle",
+    keywords=("elli volkswagen charging wallbox api ev electric-vehicle"),
 )

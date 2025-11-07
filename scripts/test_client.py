@@ -13,9 +13,9 @@ import sys
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
-from elli_api_client import ElliAPIClient
+from elli_api_client import ElliAPIClient  # noqa: E402
 
 
 def main():
@@ -107,7 +107,10 @@ def main():
                         energy_kwh = accumulated["accumulated_energy_wh"] / 1000
                         print(f"    - Total Energy: {energy_kwh:.2f} kWh")
 
-                        if "momentary_charging_speed_watts" in accumulated and accumulated["momentary_charging_speed_watts"]:
+                        if (
+                            "momentary_charging_speed_watts" in accumulated
+                            and accumulated["momentary_charging_speed_watts"]
+                        ):
                             power_kw = accumulated["momentary_charging_speed_watts"] / 1000
                             print(f"    - Current Power: {power_kw:.2f} kW")
 

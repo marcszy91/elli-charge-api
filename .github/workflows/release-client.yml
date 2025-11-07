@@ -23,15 +23,11 @@ jobs:
     steps:
       - name: Run release-please for client
         id: release
-        uses: google-github-actions/release-please-action@v4
+        uses: googleapis/release-please-action@v4
         with:
           release-type: python
-          package-name: elli-api-client
           path: src/elli_api_client
-          changelog-path: src/elli_api_client/CHANGELOG.md
           include-component-in-tag: true
-          component: client
-          bump-minor-pre-major: true
 
       - name: Checkout code
         if: ${{ steps.release.outputs.release_created }}
