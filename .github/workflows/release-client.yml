@@ -1,13 +1,14 @@
 name: Release Client Package
 
 on:
-  push:
-    paths:
-      - 'src/elli_api_client/**'
-      - 'setup.py'
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_dispatch:  # Only manual trigger for now
+  # Disabled automatic trigger to avoid conflicts with main release-please
+  # push:
+  #   paths:
+  #     - 'src/elli_api_client/**'
+  #     - 'setup.py'
+  #   branches:
+  #     - main
 
 permissions:
   contents: write
