@@ -1,0 +1,50 @@
+name: Release Client Package
+
+on:
+  push:
+    paths:
+      - 'src/elli_api_client/**'
+      - 'setup.py'
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please-client:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+
+    steps:
+      - name: Run release-please for client
+        id: release
+        uses: google-github-actions/release-please-action@v4
+        with:
+          release-type: python
+          package-name: elli-api-client
+          path: src/elli_api_client
+          changelog-path: src/elli_api_client/CHANGELOG.md
+          include-component-in-tag: true
+          component: client
+          bump-minor-pre-major: true
+
+      - name: Checkout code
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v4
+
+      - name: Tag versions
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+          VERSION="${{ steps.release.outputs.version }}"
+
+          # Create client-specific tags
+          git tag -a "client-v${VERSION}" -m "Client release v${VERSION}"
+          git push origin "client-v${VERSION}"

@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment
+.env
+.env.local
+
+# Documentation
+README.md
+docs/
+CONTRIBUTING.md
+CHANGELOG.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Test files
+scripts/
+tests/
+
+# Traffic captures
+*.txt
+
+# Development
+requirements-dev.txt
+pyproject.toml
+.pre-commit-config.yaml
+
+# Docker files not needed in image
+Dockerfile
+Dockerfile.production
+docker-compose.yml
+docker-compose.production.yml

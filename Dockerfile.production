@@ -1,0 +1,47 @@
+# Production-ready multi-stage Dockerfile with Nginx
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install nginx and supervisor
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends nginx supervisor && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy dependencies from builder
+COPY --from=builder /root/.local /root/.local
+
+# Copy application files
+COPY src/ ./src/
+
+# Copy nginx and supervisor configs
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Make sure scripts in .local are usable
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/app/src
+
+# Create nginx directories
+RUN mkdir -p /var/log/nginx /var/log/supervisor /run/nginx && \
+    chown -R www-data:www-data /var/log/nginx /run/nginx
+
+# Expose port
+EXPOSE 80
+
+# Health check on nginx
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Run supervisor to manage nginx and uvicorn
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
