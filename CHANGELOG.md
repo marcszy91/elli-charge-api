@@ -1,3 +1,15 @@
+## [1.4.0](https://github.com/mawiak/elli-client/compare/v1.3.0...v1.4.0) (2026-07-13)
+
+
+### Features
+
+* add charging records retrieval functionality and update models ([844f7c2](https://github.com/mawiak/elli-client/commit/844f7c224cb4314a970af83391a7c9558dbeefa2))
+
+
+### Bug Fixes
+
+* reorder imports and update __all__ in __init__.py ([c9f6231](https://github.com/mawiak/elli-client/commit/c9f623176bb25503507b7c713a97fa8d92aa13f6))
+
 ## [1.3.0](https://github.com/mawiak/elli-client/compare/v1.2.0...v1.3.0) (2026-05-24)
 
 
