@@ -336,6 +336,85 @@ class ElliAPIClient:
 
         return response.json()
 
+    def get_charging_records(
+        self,
+        station_id: str,
+        created_after: Optional[str] = None,
+        created_before: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        sort: str = "created_at",
+    ) -> list["ChargingRecord"]:
+        """
+        Get historical charging records for a specific station.
+
+        This returns completed/historical charging sessions, unlike get_charging_sessions()
+        which only returns active/ongoing sessions.
+
+        Args:
+            station_id: The ID of the charging station
+            created_after: Filter records created after this timestamp (ISO 8601, e.g., "2026-05-31T22:00:00Z")
+            created_before: Filter records created before this timestamp (ISO 8601, e.g., "2026-06-30T21:59:00Z")
+            limit: Maximum number of records to return (default: 100)
+            offset: Pagination offset (default: 0)
+            sort: Sort field (default: "created_at")
+
+        Returns:
+            List of ChargingRecord objects containing historical session data
+
+        Raises:
+            ValueError: If not authenticated or API request fails
+
+        Example:
+            >>> from datetime import datetime, timedelta
+            >>> client = ElliAPIClient()
+            >>> client.login("user@example.com", "password")
+            >>> stations = client.get_stations()
+            >>> station_id = stations[0].id
+            >>>
+            >>> # Get last 30 days of charging records
+            >>> now = datetime.utcnow()
+            >>> after = (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            >>> before = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            >>>
+            >>> records = client.get_charging_records(
+            ...     station_id=station_id,
+            ...     created_after=after,
+            ...     created_before=before
+            ... )
+            >>>
+            >>> for record in records:
+            ...     kwh = record.total_energy_wh / 1000
+            ...     print(f"{record.start_date_time}: {kwh:.2f} kWh")
+        """
+        from .models import ChargingRecord, ChargingRecordsResponse
+
+        params = {
+            "station_id": station_id,
+            "limit": limit,
+            "offset": offset,
+            "sort": sort,
+        }
+
+        if created_after:
+            params["created_after"] = created_after
+        if created_before:
+            params["created_before"] = created_before
+
+        response = self.client.get(
+            f"{self.api_base_url}/chargeathome/v1/chargingrecords",
+            headers=self._get_headers(),
+            params=params,
+        )
+
+        if response.status_code != 200:
+            raise ValueError(f"Failed to get charging records: {response.status_code} - {response.text}")
+
+        data = response.json()
+        records_response = ChargingRecordsResponse(**data)
+
+        return records_response.charging_records
+
     def get_charging_records_pdf(
         self,
         station_id: str,

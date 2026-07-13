@@ -76,3 +76,41 @@ class RFIDCard(BaseModel):
     tenant_id: Optional[str] = None  # Tenant identifier
     tenant_name: Optional[str] = None  # Tenant name (e.g., "Elli")
     updated_at: Optional[str] = None  # Last update timestamp
+
+
+class Location(BaseModel):
+    """Location information for charging records."""
+
+    id: str  # Unique location identifier
+
+
+class ChargingRecord(BaseModel):
+    """Historical charging record from Elli API."""
+
+    id: str  # Unique record identifier
+    created_at: str  # Record creation timestamp
+    total_energy_wh: int  # Total energy consumed in watt-hours
+    start_date_time: str  # Session start timestamp
+    stop_date_time: str  # Session end timestamp
+    session_faulted: bool  # Whether session had faults
+    charging_session_id: str  # Associated charging session ID
+    transaction_id: str  # Transaction identifier
+    connector_id: int  # Connector number
+    station_id: str  # Station identifier
+    station_serial_number: str  # Station serial number
+    station_name: str  # Station name
+    station_model: str  # Station model
+    rfid_card_id: Optional[str] = None  # RFID card ID used
+    rfid_card_serial_number: Optional[str] = None  # RFID card serial
+    authentication_method: Optional[str] = None  # Authentication method
+    authorization_mode: Optional[str] = None  # Authorization mode
+    location: Optional[Location] = None  # Location information
+
+
+class ChargingRecordsResponse(BaseModel):
+    """Response from charging records API endpoint."""
+
+    limit: int  # Records per page
+    offset: int  # Pagination offset
+    total_count: int  # Total number of records
+    charging_records: list[ChargingRecord]  # List of charging records
