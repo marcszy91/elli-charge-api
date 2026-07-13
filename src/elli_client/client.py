@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import httpx
 
 from .config import settings
-from .models import ChargingSession, RFIDCard, Station, TokenResponse
+from .models import ChargingRecord, ChargingRecordsResponse, ChargingSession, RFIDCard, Station, TokenResponse
 
 
 class ElliAPIClient:
@@ -387,8 +387,6 @@ class ElliAPIClient:
             ...     kwh = record.total_energy_wh / 1000
             ...     print(f"{record.start_date_time}: {kwh:.2f} kWh")
         """
-        from .models import ChargingRecord, ChargingRecordsResponse
-
         params = {
             "station_id": station_id,
             "limit": limit,
