@@ -14,28 +14,50 @@ Complete reference for the Elli Client API.
 
 ## Authentication
 
-### `login(email, password)`
+### `create_authorization()`
 
-Authenticate with the Elli API using OAuth2 PKCE flow.
+Create a cryptographically secure PKCE authorization session without making a network request.
 
-**Parameters:**
-- `email` (str): Your Elli account email address
-- `password` (str): Your Elli account password
+**Returns:** `AuthorizationSession` containing `authorization_url`, `state`, `code_verifier`, and timezone-aware `created_at`.
 
-**Returns:**
-- `TokenResponse`: Object containing access_token, refresh_token, and other OAuth2 data
+The calling application must open `authorization_url` in a normal browser and retain the complete session object. Elli Client does not open browsers or receive callbacks itself.
+
+### `exchange_callback(callback_url, authorization)`
+
+Validate the custom-scheme callback's scheme, host, path, OAuth error, and state, then exchange its authorization code with the session's PKCE verifier.
+
+**Returns:** `TokenResponse`. This method does not modify client state; pass its result to `set_tokens()`.
 
 **Raises:**
-- `ValueError`: If login fails or credentials are invalid
+- `InvalidOAuthCallback`: Callback URI, error response, or authorization code is invalid
+- `InvalidOAuthState`: State is missing or does not match
+- `TokenExchangeError`: Token endpoint request or response failed
+
+### `refresh(refresh_token)`
+
+Obtain a new access token. If Auth0 rotates the refresh token, the returned model contains the replacement. If no replacement is returned, the input refresh token is preserved in the model.
+
+**Raises:** `ReauthenticationRequired` for `invalid_grant`; `TokenRefreshError` for other failures.
+
+### `set_tokens(tokens)` / `set_access_token(access_token)`
+
+Set credentials used by subsequent API requests. Tokens are held in memory only and are never persisted by the library.
 
 **Example:**
 ```python
 from elli_client import ElliAPIClient
 
 client = ElliAPIClient()
-token = client.login("your.email@example.com", "your_password")
-print(f"Access token expires in: {token.expires_in} seconds")
+authorization = client.create_authorization()
+print(authorization.authorization_url)
+callback_url = receive_callback()
+tokens = client.exchange_callback(callback_url, authorization)
+client.set_tokens(tokens)
 ```
+
+### Deprecated `login(email, password)`
+
+Retained temporarily for compatibility. It emits `DeprecationWarning` and is unreliable because Cloudflare Turnstile requires interactive browser authentication. It will not bypass or automate the CAPTCHA.
 
 ---
 
@@ -189,7 +211,7 @@ The client supports Python's context manager protocol for automatic cleanup:
 from elli_client import ElliAPIClient
 
 with ElliAPIClient() as client:
-    token = client.login("email@example.com", "password")
+    client.set_tokens(tokens)
     stations = client.get_stations()
     # Client automatically closes when exiting the 'with' block
 ```
@@ -201,7 +223,7 @@ If not using a context manager, remember to close the client:
 ```python
 client = ElliAPIClient()
 try:
-    token = client.login("email@example.com", "password")
+    client.set_tokens(tokens)
     stations = client.get_stations()
 finally:
     client.close()
@@ -226,17 +248,18 @@ client = ElliAPIClient(
 
 ## Error Handling
 
-All API methods raise `ValueError` on errors. Always wrap calls in try-except blocks:
+Authentication methods use the exported `ElliClientError` hierarchy. Existing data API methods continue to raise `ValueError` on request failures for compatibility.
 
 ```python
-from elli_client import ElliAPIClient
+from elli_client import ElliAPIClient, ElliClientError
 
 client = ElliAPIClient()
 
 try:
-    token = client.login("email@example.com", "password")
+    tokens = client.refresh(stored_refresh_token)
+    client.set_tokens(tokens)
     stations = client.get_stations()
-except ValueError as e:
+except ElliClientError as e:
     print(f"Error: {e}")
 ```
 
@@ -249,12 +272,15 @@ except ValueError as e:
 ```python
 class TokenResponse:
     access_token: str       # JWT access token
-    refresh_token: str      # Refresh token
-    id_token: str          # OpenID Connect ID token
-    token_type: str        # Usually "Bearer"
-    expires_in: int        # Expiration time in seconds
-    scope: str             # Granted OAuth2 scopes
+    refresh_token: Optional[str]
+    id_token: Optional[str]
+    token_type: Optional[str]
+    expires_in: Optional[int]
+    scope: Optional[str]
+    expires_at: Optional[datetime]  # Calculated UTC expiry
 ```
+
+Token fields are excluded from the model representation to reduce accidental disclosure. The caller remains responsible for treating the model as sensitive data.
 
 ### Station
 

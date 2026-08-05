@@ -21,6 +21,8 @@ Welcome to the Elli Client documentation.
 - [Firmware](api.md#firmware)
 - [Statistics](api.md#statistics)
 
+Authentication is an application-assisted browser flow: the library creates and validates OAuth/PKCE data, while the consuming application opens the browser, receives the custom-scheme callback, and stores refresh tokens securely.
+
 ## GitHub Pages
 
 This documentation is also available as a GitHub Pages website at:
