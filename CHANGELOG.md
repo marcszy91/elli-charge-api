@@ -1,3 +1,10 @@
+## [1.5.0](https://github.com/mawiak/elli-client/compare/v1.4.0...v1.5.0) (2026-08-05)
+
+
+### Features
+
+* implement Cloudflare CAPTCHA login flow with PKCE and update documentation ([cde89fa](https://github.com/mawiak/elli-client/commit/cde89faa4f0648837c14871bef442b68392620ad))
+
 ## [1.4.0](https://github.com/mawiak/elli-client/compare/v1.3.0...v1.4.0) (2026-07-13)
 
 
