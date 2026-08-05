@@ -6,6 +6,7 @@ Welcome to the Elli Client documentation.
 
 - **[Quick Start Guide](quick-start.md)** - Get started in minutes
 - **[API Reference](api.md)** - Complete API documentation with all methods and parameters
+- **[Native callback E2E test](native-callback-e2e-test.md)** - Developer harness for macOS and Windows
 
 ## Quick Links
 
@@ -20,6 +21,8 @@ Welcome to the Elli Client documentation.
 - [Charging Sessions](api.md#charging-sessions)
 - [Firmware](api.md#firmware)
 - [Statistics](api.md#statistics)
+
+Authentication is an application-assisted browser flow: the library creates and validates OAuth/PKCE data, while the consuming application opens the browser, receives the custom-scheme callback, and stores refresh tokens securely.
 
 ## GitHub Pages
 

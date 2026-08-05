@@ -2,15 +2,33 @@
 
 import base64
 import hashlib
+import hmac
 import re
 import secrets
+import warnings
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 import httpx
 
 from .config import settings
-from .models import ChargingRecord, ChargingRecordsResponse, ChargingSession, RFIDCard, Station, TokenResponse
+from .exceptions import (
+    InvalidOAuthCallback,
+    InvalidOAuthState,
+    ReauthenticationRequired,
+    TokenExchangeError,
+    TokenRefreshError,
+)
+from .models import (
+    AuthorizationSession,
+    ChargingRecord,
+    ChargingRecordsResponse,
+    ChargingSession,
+    RFIDCard,
+    Station,
+    TokenResponse,
+)
 
 
 class ElliAPIClient:
@@ -72,9 +90,161 @@ class ElliAPIClient:
         """Generate random state parameter for OAuth2"""
         return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
 
-    def login(self, email: str, password: str) -> TokenResponse:
+    def create_authorization(self) -> AuthorizationSession:
+        """Create a browser authorization URL and the state needed for its callback.
+
+        The caller is responsible for opening ``authorization_url`` in a browser and
+        retaining the returned session until the custom-scheme callback is received.
+        This method does not perform a network request.
         """
-        Login to Elli API using username/password with OAuth2 PKCE flow.
+        code_verifier, code_challenge = self._generate_pkce_pair()
+        state = self._generate_state()
+        scopes = self.scope.split()
+        if "offline_access" not in scopes:
+            scopes.append("offline_access")
+
+        authorize_params = {
+            "client_id": self.client_id,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            "audience": self.audience,
+            "redirect_uri": self.redirect_uri,
+            "scope": " ".join(scopes),
+            "response_type": "code",
+            "state": state,
+            "prompt": "login",
+            "connection_scope": "openid profile",
+            "ui_locales": "de",
+        }
+        authorization_url = f"{self.auth_base_url.rstrip('/')}/authorize?{urlencode(authorize_params)}"
+        return AuthorizationSession(
+            authorization_url=authorization_url,
+            state=state,
+            code_verifier=code_verifier,
+            created_at=datetime.now(timezone.utc),
+        )
+
+    @staticmethod
+    def _safe_oauth_error(response: httpx.Response) -> Optional[str]:
+        """Return only a non-secret OAuth error identifier from a response."""
+        try:
+            error = response.json().get("error")
+        except (ValueError, AttributeError):
+            return None
+        return error if isinstance(error, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", error) else None
+
+    def _request_tokens(
+        self,
+        payload: Dict[str, str],
+        error_type: type[TokenExchangeError] | type[TokenRefreshError],
+    ) -> TokenResponse:
+        """Request tokens without exposing request or response secrets in errors."""
+        try:
+            response = self.client.post(
+                f"{self.auth_base_url.rstrip('/')}/oauth/token",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+        except httpx.HTTPError as exc:
+            raise error_type("OAuth token endpoint request failed") from exc
+
+        oauth_error = self._safe_oauth_error(response)
+        if response.status_code < 200 or response.status_code >= 300:
+            if error_type is TokenRefreshError and oauth_error == "invalid_grant":
+                raise ReauthenticationRequired(
+                    "The refresh token is invalid, expired, or revoked; interactive authorization is required"
+                )
+            suffix = f" ({oauth_error})" if oauth_error else ""
+            raise error_type(f"OAuth token endpoint returned HTTP {response.status_code}{suffix}")
+
+        try:
+            return TokenResponse.model_validate(response.json())
+        except (ValueError, TypeError):
+            # Pydantic validation errors can include rejected input values.
+            raise error_type("OAuth token endpoint returned an invalid token response") from None
+
+    def exchange_callback(
+        self,
+        callback_url: str,
+        authorization: AuthorizationSession,
+    ) -> TokenResponse:
+        """Validate an OAuth callback and exchange its code using PKCE."""
+        try:
+            callback = urlparse(callback_url)
+            expected = urlparse(self.redirect_uri)
+            redirect_mismatch = (
+                callback.scheme.lower() != expected.scheme.lower()
+                or callback.hostname != expected.hostname
+                or callback.port != expected.port
+                or callback.path != expected.path
+                or callback.username is not None
+                or callback.password is not None
+            )
+        except ValueError as exc:
+            raise InvalidOAuthCallback("OAuth callback URL is malformed") from exc
+        if redirect_mismatch:
+            raise InvalidOAuthCallback("OAuth callback redirect URI does not match the configured redirect URI")
+
+        params = parse_qs(callback.query, keep_blank_values=True)
+        if "error" in params:
+            error = params["error"][0] if len(params["error"]) == 1 else "unknown_error"
+            safe_error = error if re.fullmatch(r"[A-Za-z0-9_.-]+", error) else "unknown_error"
+            raise InvalidOAuthCallback(f"OAuth authorization failed: {safe_error}")
+
+        states = params.get("state", [])
+        returned_state = states[0] if len(states) == 1 else ""
+        if not returned_state or not hmac.compare_digest(returned_state, authorization.state):
+            raise InvalidOAuthState("OAuth callback state is missing or does not match")
+
+        codes = params.get("code", [])
+        code = codes[0] if len(codes) == 1 else ""
+        if not code:
+            raise InvalidOAuthCallback("OAuth callback does not contain an authorization code")
+
+        token = self._request_tokens(
+            {
+                "code": code,
+                "client_id": self.client_id,
+                "redirect_uri": self.redirect_uri,
+                "grant_type": "authorization_code",
+                "code_verifier": authorization.code_verifier,
+            },
+            TokenExchangeError,
+        )
+        return token
+
+    def refresh(self, refresh_token: str) -> TokenResponse:
+        """Refresh tokens, preserving the old refresh token if it is not rotated."""
+        if not refresh_token:
+            raise TokenRefreshError("A refresh token is required")
+        token = self._request_tokens(
+            {
+                "grant_type": "refresh_token",
+                "client_id": self.client_id,
+                "refresh_token": refresh_token,
+            },
+            TokenRefreshError,
+        )
+
+        if token.refresh_token is None:
+            token = token.model_copy(update={"refresh_token": refresh_token})
+        return token
+
+    def set_tokens(self, tokens: TokenResponse) -> None:
+        """Use tokens supplied by the caller for subsequent API requests."""
+        self.access_token = tokens.access_token
+        self.refresh_token = tokens.refresh_token
+
+    def set_access_token(self, access_token: str) -> None:
+        """Use an existing access token for subsequent API requests."""
+        self.access_token = access_token
+
+    def login(self, email: str, password: str) -> TokenResponse:
+        """Deprecated direct username/password login.
+
+        This compatibility method is unreliable now that Elli requires an
+        interactive Cloudflare Turnstile challenge. New applications must use
+        :meth:`create_authorization` and :meth:`exchange_callback`.
 
         Args:
             email: Elli account email
@@ -84,8 +254,15 @@ class ElliAPIClient:
             TokenResponse with access_token, refresh_token, etc.
 
         Raises:
-            ValueError: If login fails or authorization code cannot be extracted
+            TokenExchangeError: If no authorization code or tokens can be obtained
         """
+        warnings.warn(
+            "login(email, password) is deprecated and unreliable because Elli uses interactive "
+            "Cloudflare Turnstile. Use create_authorization() and exchange_callback() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         # Generate PKCE parameters
         code_verifier, code_challenge = self._generate_pkce_pair()
         state = self._generate_state()
@@ -176,9 +353,8 @@ class ElliAPIClient:
                     auth_code = code_match.group(1)
 
         if not auth_code:
-            raise ValueError(
-                f"Could not extract authorization code. Last status: {current_response.status_code}, "
-                f"Last URL: {current_response.url}"
+            raise TokenExchangeError(
+                f"Could not extract authorization code; last response was HTTP {current_response.status_code}"
             )
 
         # Step 4: Exchange authorization code for tokens
@@ -199,14 +375,13 @@ class ElliAPIClient:
         )
 
         if token_response.status_code != 200:
-            raise ValueError(f"Token exchange failed: {token_response.status_code} - {token_response.text}")
+            raise TokenExchangeError(f"Token exchange failed with HTTP {token_response.status_code}")
 
         token_data_response = token_response.json()
         token = TokenResponse(**token_data_response)
 
         # Store tokens
-        self.access_token = token.access_token
-        self.refresh_token = token.refresh_token
+        self.set_tokens(token)
 
         return token
 
@@ -368,7 +543,7 @@ class ElliAPIClient:
         Example:
             >>> from datetime import datetime, timedelta
             >>> client = ElliAPIClient()
-            >>> client.login("user@example.com", "password")
+            >>> client.set_tokens(tokens)
             >>> stations = client.get_stations()
             >>> station_id = stations[0].id
             >>>
@@ -439,7 +614,7 @@ class ElliAPIClient:
 
         Example:
             >>> client = ElliAPIClient()
-            >>> client.login("user@example.com", "password")
+            >>> client.set_tokens(tokens)
             >>> # Get all charging sessions (RFID + App)
             >>> pdf_data = client.get_charging_records_pdf(
             ...     station_id="a1b2c3d4-1234-5678-abcd-1234567890ab",

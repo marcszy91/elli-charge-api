@@ -8,76 +8,95 @@ Python client library for the Elli Wallbox API.
 pip install elli-client
 ```
 
-## Quick Start
+## Browser-based login with PKCE
+
+Elli's Auth0 login uses Cloudflare Turnstile. Authentication therefore takes place interactively in a normal browser; this library neither opens the browser nor automates the CAPTCHA.
 
 ```python
 from elli_client import ElliAPIClient
 
-# Initialize client and login
 client = ElliAPIClient()
-token = client.login("your.email@example.com", "your_password")
 
-# Get charging stations
+# No network request is made here. Keep this object until the callback arrives.
+authorization = client.create_authorization()
+
+# Your application opens this URL in the user's browser.
+print(authorization.authorization_url)
+
+# Your application receives the complete custom-scheme callback URL, for example:
+# com.elli.ios.emsp://login.elli.eco/ios/com.elli.ios.emsp/callback?code=...&state=...
+callback_url = receive_callback_in_your_application()
+
+tokens = client.exchange_callback(
+    callback_url=callback_url,
+    authorization=authorization,
+)
+client.set_tokens(tokens)
+
 stations = client.get_stations()
-for station in stations:
-    print(f"Station: {station.name} ({station.id})")
-
-# Get active charging session
-session = client.get_active_charging_session()
-if session:
-    print(f"Charging: {session.energy_consumption_wh / 1000:.2f} kWh")
-    print(f"Power: {session.momentary_power_w} W")
 ```
 
-## Features
+The calling application is responsible for opening `authorization_url`, receiving the callback URL, and securely storing the refresh token. Elli Client deliberately contains no browser, GUI, URL-handler registration, Keychain integration, or persistent token storage. It never needs or processes the user's Elli password in the recommended flow.
 
-- Authentication with Elli Account
-- Query charging stations
-- Retrieve charging sessions (active and historical)
-- Current charging power and energy consumption
-- Station information
+## Refreshing tokens
 
-## Documentation
+At a later application start, load the refresh token from the application's secure storage:
 
-- **[Quick Start Guide](docs/quick-start.md)** - Get started in minutes
-- **[API Reference](docs/api.md)** - Complete API documentation
-- **[Docs Overview](docs/README.md)** - Documentation index
+```python
+from elli_client import ElliAPIClient, ReauthenticationRequired
+
+client = ElliAPIClient()
+
+try:
+    tokens = client.refresh(stored_refresh_token)
+except ReauthenticationRequired:
+    # Start the interactive browser flow again.
+    raise
+
+client.set_tokens(tokens)
+store_refresh_token_securely(tokens.refresh_token)
+```
+
+Auth0 may rotate refresh tokens. `refresh()` returns the new token when one is supplied; if the response omits it, the returned `TokenResponse.refresh_token` retains the token passed to `refresh()`. Consumers should always persist the refresh token from the returned object.
+
+## Password-login migration
+
+The former call remains temporarily available to avoid an immediate breaking change:
+
+```python
+token = client.login(email, password)  # deprecated and unreliable
+```
+
+It now emits `DeprecationWarning`. Cloudflare Turnstile makes this direct HTTP login unreliable, and the library does not attempt to bypass it. Migrate to `create_authorization()`, `exchange_callback()`, and `set_tokens()` as shown above.
+
+## API features
+
+- Query charging stations and firmware
+- Retrieve active and historical charging sessions
+- Retrieve RFID card data
+- Retrieve charging records and download charging-report PDFs
+- Refresh OAuth tokens with rotation support
+
+See the [quick-start guide](docs/quick-start.md) and [API reference](docs/api.md) for details.
+
+Developers validating automatic macOS/Windows custom-scheme delivery can use the [native callback E2E test harness](docs/native-callback-e2e-test.md).
 
 ## Development
 
-### Setup
-
 ```bash
-git clone https://github.com/marcszy91/elli-client
-cd elli-client
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
-
-# Copy environment template and add your credentials
-cp .env.template .env
-# Edit .env and add your ELLI_EMAIL and ELLI_PASSWORD
-```
-
-### Testing
-
-```bash
-# Format code
-black src/
-isort src/
-
-# Run tests (when implemented)
 pytest
+black --check src tests
+isort --check-only src tests
+flake8 src tests
 ```
 
 ## Home Assistant Integration
 
 This client is used by the [Elli Charger HACS integration](https://github.com/marcszy91/hacs-elli-charger) for Home Assistant.
 
-## License
+## License and disclaimer
 
-MIT License - see LICENSE file for details
-
-## Disclaimer
-
-This library was created through reverse engineering of the official Elli iPhone app. It is not officially supported by Elli or Volkswagen Group Charging GmbH. Use at your own risk.
+MIT License - see LICENSE. This library was created through reverse engineering of the official Elli iPhone app. It is not officially supported by Elli or Volkswagen Group Charging GmbH. Use at your own risk.

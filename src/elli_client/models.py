@@ -1,19 +1,39 @@
-"""Data models for Elli API"""
+"""Data models for Elli API."""
 
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
+
+
+@dataclass(frozen=True)
+class AuthorizationSession:
+    """State that a consumer must retain while completing browser authorization."""
+
+    authorization_url: str
+    state: str = field(repr=False)
+    code_verifier: str = field(repr=False)
+    created_at: datetime
 
 
 class TokenResponse(BaseModel):
     """OAuth2 token response from Elli API."""
 
-    access_token: str  # JWT access token for API authentication
-    refresh_token: str  # Refresh token for obtaining new access tokens
-    id_token: str  # OpenID Connect ID token
-    token_type: str  # Token type (usually "Bearer")
-    expires_in: int  # Token expiration time in seconds
-    scope: str  # Granted OAuth2 scopes
+    access_token: str = Field(repr=False)
+    refresh_token: Optional[str] = Field(default=None, repr=False)
+    id_token: Optional[str] = Field(default=None, repr=False)
+    token_type: Optional[str] = None
+    expires_in: Optional[int] = None
+    scope: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def calculate_expiry(self) -> "TokenResponse":
+        """Calculate an absolute UTC expiry when only ``expires_in`` is supplied."""
+        if self.expires_at is None and self.expires_in is not None:
+            self.expires_at = datetime.now(timezone.utc) + timedelta(seconds=self.expires_in)
+        return self
 
 
 class ChargingSession(BaseModel):
