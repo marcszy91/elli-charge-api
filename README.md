@@ -79,6 +79,8 @@ It now emits `DeprecationWarning`. Cloudflare Turnstile makes this direct HTTP l
 
 See the [quick-start guide](docs/quick-start.md) and [API reference](docs/api.md) for details.
 
+Developers validating automatic macOS/Windows custom-scheme delivery can use the [native callback E2E test harness](docs/native-callback-e2e-test.md).
+
 ## Development
 
 ```bash

@@ -148,3 +148,4 @@ cython_debug/
 
 # Project specific
 elli-traffic*.txt
+scripts/macos/*.app/
