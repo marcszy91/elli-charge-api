@@ -680,6 +680,30 @@ class ElliAPIClient:
 
         return cards
 
+    def request_reboot(self, station_id: str) -> Dict[str, Any]:
+        """
+        Request a reboot for a specific charging station.
+
+        Args:
+            station_id: The ID of the charging station
+
+        Returns:
+            Dictionary containing the reboot request status.
+
+        Raises:
+            ValueError: If not authenticated or API request fails
+        """
+        response = self.client.post(
+            f"{self.api_base_url}/chargeathome/v1/stations/{station_id}/reboot",
+            headers=self._get_headers(),
+            json={"reboot_mode": "immediate", "station_id": station_id},
+        )
+
+        if response.status_code != 200:
+            raise ValueError(f"Failed to request charger reboot: {response.status_code} - {response.text}")
+
+        return response.json()
+
     def close(self):
         """
         Close the HTTP client and cleanup resources.
